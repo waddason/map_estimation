@@ -8,6 +8,7 @@ dependencies:
   - pandas
   - scikit-learn>=1.4
   - pytables
+  - h5py
   - pip
   - pip:
     - ramp-workflow

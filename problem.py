@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-from sklearn.model_selection import GroupShuffleSplit
-
 problem_title = 'MAP estimation from non-invasive monitoring'
 
 # A type (class) which will be used to create wrapper objects for y_pred
@@ -37,8 +35,13 @@ score_types = [
 
 
 def get_cv(X, y):
-    cv = GroupShuffleSplit(n_splits=1, test_size=1, random_state=37298)
-    return cv.split(X, y, groups=X["subject"])
+    # Make sure the index is a range index so it is compatible with sklearn API
+    X = X.reset_index(drop=True)
+
+    def split():
+        yield X.query("chunk != 'val'").index, X.query("chunk == 'val'").index
+
+    return split()
 
 
 def _load_data(file, start=None, stop=None, load_waveform=True):
@@ -70,16 +73,25 @@ def get_train_data(path='.', start=None, stop=None, load_waveform=True):
 
     rw.HASH_TRAIN = hash_train
 
-    file = 'train.h5'
-    file = Path(path) / "data" / file
+    train_file = Path(path) / "data" / 'train.h5'
+    val_file = Path(path) / "data" / 'validation.h5'
     if os.environ.get("RAMP_TEST_MODE", False):
-        X_s, y_s = _load_data(file, 0, 1000, load_waveform=load_waveform)
-        X_t, y_t = _load_data(file, -1001, -1, load_waveform=load_waveform)
-        rw.X_TRAIN = pd.concat([X_s, X_t], axis=0)
-        rw.Y_TRAIN = np.concatenate([y_s, y_t], axis=0)
+        start_s, stop_s = 0, 1000
+        start_t, stop_t = -1001, -1
+        start_val, stop_val = 0, 100
     else:
-        rw.X_TRAIN, rw.Y_TRAIN = _load_data(file, start, stop, load_waveform)
-    return rw.X_TRAIN, rw.Y_TRAIN
+        start_s, stop_s = 0, int(1.5e5)
+        start_t, stop_t = -int(1.5e-5+1), -1
+        start_val, stop_val = None, None
+    X_s, y_s = _load_data(train_file, start_s, stop_s, load_waveform)
+    X_t, y_t = _load_data(train_file, start_t, stop_t, load_waveform)
+    X_val, y_val = _load_data(val_file, start_val, stop_val, load_waveform)
+    X_val['chunk'] = 'val'
+    X_train = pd.concat([X_s, X_t, X_val], axis=0, ignore_index=True)
+    y_train = np.concatenate([y_s, y_t, y_val], axis=0)
+
+    rw.X_TRAIN, rw.Y_TRAIN = X_train, y_train
+    return X_train, y_train
 
 
 def get_test_data(path='.', start=None, stop=None, load_waveform=True):
