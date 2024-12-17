@@ -15,7 +15,7 @@ Describe the challenge, in particular:
 ### Install
 
 To run a submission and the notebook you will need the dependencies listed
-in `requirements.txt`. You can install install the dependencies with the
+in `requirements.txt`. You can install the dependencies with the
 following command-line:
 
 ```bash

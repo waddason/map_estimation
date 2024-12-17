@@ -1,4 +1,5 @@
 *.profile
+/.vscode/
 
 *.egg-info
 .cache
@@ -18,5 +19,6 @@ dist/
 
 *starting_kit.html
 *.pkl
+*.h5
 
 .DS_Store
