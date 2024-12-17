@@ -51,11 +51,8 @@ def hash_folder(folder_path):
 
     # Recursively scan the folder and compute a checksum
     checksum = 1
-    for f in sorted(folder.rglob('*')):
-        if f.is_file():
-            checksum = adler32(f.read_bytes(), checksum)
-        else:
-            checksum = adler32(f.name.encode(), checksum)
+    for f in sorted(folder.rglob('*.h5')):
+        checksum = adler32(f.read_bytes(), checksum)
 
     return checksum
 
