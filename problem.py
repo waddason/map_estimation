@@ -38,8 +38,12 @@ def get_cv(X, y):
     # Make sure the index is a range index so it is compatible with sklearn API
     X = X.reset_index(drop=True)
 
+    chunks = X['chunk'].fillna('t')
+
     def split():
-        yield X.query("chunk != 'val'").index, X.query("chunk == 'val'").index
+        train_idx = chunks[chunks != 'val'].index
+        val_idx = chunks[chunks == 'val'].index
+        yield train_idx, val_idx
 
     return split()
 
