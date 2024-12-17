@@ -133,7 +133,7 @@ def setup_data(data_path, private=False, username=None, password=None):
         for f in (data_path / "public").glob("*")]
     (data_path / "public").rmdir()
     archive.unlink()
-    (data_path / "test.h5").symlink_to(data_path / "validation.h5")
+    (data_path / "validation.h5").symlink_to(data_path / "test.h5")
 
     if private:
         private_folder = get_folder(PRIVATE_PROJECT, username, password)
