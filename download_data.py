@@ -14,7 +14,7 @@ from osfclient.exceptions import UnauthorizedException
 CHALLENGE_NAME = 'map_estimation'
 PUBLIC_PROJECT = "t4uf8"
 PRIVATE_PROJECT = "g5t7q"
-PRIVATE_CKSUM = None
+PRIVATE_CKSUM = 3633597329
 PUBLIC_CKSUM = None
 
 
