@@ -11,25 +11,16 @@ from pathlib import Path
 from osfclient.api import OSF
 from osfclient.exceptions import UnauthorizedException
 
-PUBLIC_PROJECT = "t4uf8"
-
 CHALLENGE_NAME = 'map_estimation'
-RAMP_FOLDER_CONFIGURATION = {
-    'public': dict(
-        code='t4uf8',
-        files=['public.tar.gz.001', 'public.tar.gz.002', 'public.tar.gz.003'],
-        data_checksum=1199509737,
-    ),
-    'private': dict(
-        code='g5t7q',
-        files=["test.h5", "private_test.h5"],
-        data_checksum=None,
-    )
-}
+PUBLIC_PROJECT = "t4uf8"
+PRIVATE_PROJECT = "g5t7q"
+PRIVATE_CKSUM = None
+PUBLIC_CKSUM = None
 
 
-def get_connection_info(code, username=None, password=None):
+def get_folder(code, username=None, password=None):
     "Get connection to OSF and info relative to public/private data."
+    # Get the connection to OSF and find the folder in the OSF project
     osf = OSF(username=username, password=password)
 
     try:
@@ -37,7 +28,7 @@ def get_connection_info(code, username=None, password=None):
         store = project.storage('osfstorage')
     except UnauthorizedException:
         raise ValueError("Invalid credentials for RAMP private storage.")
-    return store
+    return get_one_element(store.folders, CHALLENGE_NAME)
 
 
 def get_one_element(container, name):
@@ -79,7 +70,7 @@ def checksum_data(data_dir, cksum, raise_error=False):
         )
     print("Done.")
 
-    return cksum == local_checksum
+    return local_checksum == cksum
 
 
 def download_split_archive_from_osf(folder, split_files, data_dir):
@@ -114,18 +105,10 @@ def download_from_osf(folder, filename, data_dir):
     return target_path
 
 
-def setup_data(private_data=None, username=None, password=None):
+def setup_data(data_path, private=False, username=None, password=None):
     "Download and uncompress the data from OSF."
-    public_data_path = Path("./data/")
-    if private_data is not None:
-        chunk = 'private'
-        data_path = Path(private_data)
-    else:
-        chunk = 'public'
-        data_path = public_data_path
-
-    config = RAMP_FOLDER_CONFIGURATION[chunk]
-    cksum = config['data_checksum']
+    data_path = Path(data_path)
+    cksum = PRIVATE_CKSUM if private else PUBLIC_CKSUM
 
     if not data_path.exists() or cksum is None:
         data_path.mkdir(exist_ok=True)
@@ -133,36 +116,35 @@ def setup_data(private_data=None, username=None, password=None):
         print("Data already downloaded and verified.")
         return
 
-    # Get the connection to OSF and find the folder in the OSF project
-    print("Checking the data URL...", end='', flush=True)
-    store = get_connection_info(
-        config['code'], username=username, password=password
-    )
-    challenge_folder = get_one_element(store.folders, CHALLENGE_NAME)
-    print('Ok.')
-
     # Download the public data
-    if chunk == 'public':
-        archive = download_split_archive_from_osf(
-            challenge_folder, config['files'], data_path
-        )
-        with tarfile.open(archive) as tar:
-            tar.extractall(data_path)
+    split_files = [
+        'public.tar.gz.001', 'public.tar.gz.002', 'public.tar.gz.003'
+    ]
+    public_folder = get_folder(PUBLIC_PROJECT)
+    archive = download_split_archive_from_osf(
+        public_folder, split_files, data_path
+    )
+    with tarfile.open(archive) as tar:
+        tar.extractall(data_path)
 
-        # Remove intermediate folder public
-        [f.rename(data_path / f.name)
-         for f in (data_path / "public").glob("*")]
-        (data_path / "public").rmdir()
-        archive.unlink()
+    # Remove intermediate folder public and make a copy of test.h5
+    # for public validation.h5
+    [f.rename(data_path / f.name)
+        for f in (data_path / "public").glob("*")]
+    (data_path / "public").rmdir()
+    archive.unlink()
+    (data_path / "test.h5").symlink_to(data_path / "validation.h5")
 
-        checksum_data(data_path, cksum, raise_error=True)
-    else:
-        private_test = download_from_osf(
-            challenge_folder, "private_test.h5", data_path
+    if private:
+        private_folder = get_folder(PRIVATE_PROJECT, username, password)
+        test = download_from_osf(
+            private_folder, "private_test.h5", data_path
         )
-        download_from_osf(challenge_folder, "test.h5", public_data_path)
-        private_test.rename(data_path / "test.h5")
-        (public_data_path / "train.h5").symlink_to(private_data / "train.h5")
+        validation = download_from_osf(private_folder, "test.h5", data_path)
+        validation.rename(data_path / "validation.h5")
+        test.rename(data_path / "test.h5")
+
+    checksum_data(data_path, cksum, raise_error=True)
 
 
 if __name__ == "__main__":
