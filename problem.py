@@ -81,7 +81,7 @@ def get_train_data(path='.', start=None, stop=None, load_waveform=True):
         start_val, stop_val = 0, 100
     else:
         start_s, stop_s = 0, int(1.5e5)
-        start_t, stop_t = -int(1.5e-5+1), -1
+        start_t, stop_t = -int(1.5e5+1), -1
         start_val, stop_val = None, None
     X_s, y_s = _load_data(train_file, start_s, stop_s, load_waveform)
     X_t, y_t = _load_data(train_file, start_t, stop_t, load_waveform)
