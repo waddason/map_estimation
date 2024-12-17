@@ -15,7 +15,7 @@ CHALLENGE_NAME = 'map_estimation'
 PUBLIC_PROJECT = "t4uf8"
 PRIVATE_PROJECT = "g5t7q"
 PRIVATE_CKSUM = 3633597329
-PUBLIC_CKSUM = None
+PUBLIC_CKSUM = 1212880351
 
 
 def get_folder(code, username=None, password=None):
