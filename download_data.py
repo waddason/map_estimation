@@ -151,7 +151,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=f'Data loader for the {CHALLENGE_NAME} challenge on RAMP.'
     )
-    parser.add_argument('--private-data', type=Path, default=None,
+    parser.add_argument('--data-path', type=Path, default=Path("data"),
+                        help='If this flag is used, download the private data '
+                        'from OSF. This requires the username and password '
+                        'options to be provided.')
+    parser.add_argument('--private', action="store_true",
                         help='If this flag is used, download the private data '
                         'from OSF. This requires the username and password '
                         'options to be provided.')
@@ -161,8 +165,5 @@ if __name__ == "__main__":
                         help='Password for downloading private OSF data.')
     args = parser.parse_args()
 
-    if args.private_data is not None:
-        setup_data(private_data=args.private_data, username=args.username,
-                   password=args.password)
-    else:
-        setup_data()
+    setup_data(args.data_path, private=args.private,
+               username=args.username, password=args.password)
