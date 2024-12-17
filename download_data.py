@@ -4,6 +4,7 @@ To adapt it for another challenge, change the CHALLENGE_NAME and upload
 public/private data as `tar.gz` archives in dedicated OSF folders named after
 the challenge.
 """
+import shutil
 import tarfile
 import argparse
 from zlib import adler32
@@ -124,6 +125,7 @@ def setup_data(data_path, private=False, username=None, password=None):
     archive = download_split_archive_from_osf(
         public_folder, split_files, data_path
     )
+    print("Extracting the data...", end='', flush=True)
     with tarfile.open(archive) as tar:
         tar.extractall(data_path)
 
@@ -133,7 +135,8 @@ def setup_data(data_path, private=False, username=None, password=None):
         for f in (data_path / "public").glob("*")]
     (data_path / "public").rmdir()
     archive.unlink()
-    (data_path / "validation.h5").symlink_to(data_path / "test.h5")
+    shutil.copyfile(data_path / "test.h5", data_path / "validation.h5")
+    print("Done.")
 
     if private:
         private_folder = get_folder(PRIVATE_PROJECT, username, password)

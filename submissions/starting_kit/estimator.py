@@ -1,10 +1,7 @@
-from sklearn import set_config
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import make_column_transformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OrdinalEncoder
-
-set_config(transform_output="pandas")
 
 
 class IgnoreDomain(RandomForestRegressor):
