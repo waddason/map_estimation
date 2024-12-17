@@ -73,10 +73,10 @@ def get_train_data(path='.', start=None, stop=None, load_waveform=True):
     file = 'train.h5'
     file = Path(path) / "data" / file
     if os.environ.get("RAMP_TEST_MODE", False):
-        X_v, y_v = _load_data(file, 0, 1000, load_waveform=load_waveform)
-        X_m, y_m = _load_data(file, -1001, -1, load_waveform=load_waveform)
-        rw.X_TRAIN = pd.concat([X_v, X_m], axis=0)
-        rw.Y_TRAIN = np.concatenate([y_v, y_m], axis=0)
+        X_s, y_s = _load_data(file, 0, 1000, load_waveform=load_waveform)
+        X_t, y_t = _load_data(file, -1001, -1, load_waveform=load_waveform)
+        rw.X_TRAIN = pd.concat([X_s, X_t], axis=0)
+        rw.Y_TRAIN = np.concatenate([y_s, y_t], axis=0)
     else:
         rw.X_TRAIN, rw.Y_TRAIN = _load_data(file, start, stop, load_waveform)
     return rw.X_TRAIN, rw.Y_TRAIN

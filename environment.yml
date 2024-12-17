@@ -1,4 +1,4 @@
-name: ramp-template-kit
+name: ramp-map-estimation
 channels:
   - conda-forge
 dependencies:
@@ -7,6 +7,9 @@ dependencies:
   - numpy
   - pandas
   - scikit-learn>=1.4
+  - pytables
   - pip
   - pip:
     - ramp-workflow
+    - osfclient
+    - physiocurve
