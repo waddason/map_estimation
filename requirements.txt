@@ -4,4 +4,4 @@ pandas
 matplotlib
 scikit-learn
 physiocurve
-pytables
+tables
