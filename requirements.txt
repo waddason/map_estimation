@@ -7,3 +7,4 @@ physiocurve
 h5py
 tables
 osfclient
+skada
