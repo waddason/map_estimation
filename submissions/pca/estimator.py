@@ -9,6 +9,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Lasso
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 cat_cols = ["gender"]
 # num_cols = ["age", "height", "weight", "bmi"]
@@ -21,9 +22,19 @@ pd.set_option("future.no_silent_downcasting", True)
 
 
 class MyEstimator:
-    def __init__(self, nb_train_samples: int = 100):
+    def __init__(self, nb_train_samples: int = 100, n_components:int=10):
         self.nb_train_samples = nb_train_samples
-        self.extract_cols = None
+        self.nb_components = n_components
+        
+        # pipeline creation
+        self.clf = make_pipeline(
+            make_column_transformer(
+                
+                ("passthrough", self.extract_cols.to_list() + num_cols),
+            ),
+            HistGradientBoostingRegressor(categorical_features=cat_cols))
+            ,
+        )
 
     def _prepare_X(self, X, y=None, train=True):
         """Extract the features of the timeseries signals."""
@@ -89,15 +100,7 @@ class MyEstimator:
         )
         # print(f"fit on {X_train.columns.to_list()} {X_train.shape}")
 
-        # pipeline creation
-        self.clf = make_pipeline(
-            make_column_transformer(
-                (OneHotEncoder(), cat_cols),
-                ("passthrough", self.extract_cols.to_list() + num_cols),
-            ),
-            SimpleImputer(strategy="median"),
-            Lasso(alpha=2.0, max_iter=10_000),
-        )
+
 
         self.clf.fit(
             X_train,
@@ -106,12 +109,12 @@ class MyEstimator:
         return self
 
     def predict(self, X):
-        X = self._prepare_X(X, train=False)
+        X_pred = self._prepare_X(X, train=False)
         # Issue: missing columns on test data for prediction.
         # Solution: remove columns from training
-        print(f"predict on {X.shape=}")
+        print(f"predict on {X_pred.shape=}")
 
-        return self.clf.predict(X)
+        return self.clf.predict(X_pred)
 
 
 def get_estimator():
