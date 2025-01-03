@@ -6,7 +6,12 @@ from sklearn.compose import make_column_transformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Lasso
-from tsfresh import extract_features, select_features
+from tsfresh import select_features
+from tsfresh.feature_extraction import (
+    extract_features,
+    EfficientFCParameters,
+    MinimalFCParameters,
+)
 
 cat_cols = ["gender"]
 # num_cols = ["age", "height", "weight", "bmi"]
@@ -48,6 +53,8 @@ class MyEstimator:
             column_id="i_seg",
             column_sort="step",
             column_value=None,
+            # default_fc_parameters=EfficientFCParameters(),
+            default_fc_parameters=MinimalFCParameters(),
         )
         X_extract = X_extract.dropna(axis=1, how="all").fillna(0)
         # Override the index to ensure the merge
