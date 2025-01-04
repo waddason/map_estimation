@@ -2,11 +2,10 @@
 import neurokit2 as nk
 import numpy as np
 import pandas as pd
-
+from time import time
 import scipy.stats as stats
-from sklearn import set_config
 from sklearn.compose import make_column_transformer
-from sklearn.decomposition import PCA
+
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Lasso
@@ -15,8 +14,6 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
-
-set_config(transform_output="pandas")
 
 ###############################################################################
 # Constants
@@ -160,8 +157,12 @@ def get_waves_len(waves_peak) -> dict[str : np.float64]:
             waves_peak[f"ECG_{wave_n}_Onsets"]
         )
         waves_len = waves_len[~np.isnan(waves_len)]
-        val_dict[f"ECG_{wave_n}_Duration_mean"] = waves_len.mean()
-        val_dict[f"ECG_{wave_n}_Duration_std"] = waves_len.std()
+        if waves_len.size > 0:
+            val_dict[f"ECG_{wave_n}_Duration_mean"] = waves_len.mean()
+            val_dict[f"ECG_{wave_n}_Duration_std"] = waves_len.std()
+        else:
+            val_dict[f"ECG_{wave_n}_Duration_mean"] = 0.0
+            val_dict[f"ECG_{wave_n}_Duration_std"] = 1.0
 
     # Delta between phases PR, peak QS, RT, TP
 
@@ -174,19 +175,26 @@ def get_waves_len(waves_peak) -> dict[str : np.float64]:
         min_len = min(len(waves_peak[end]), len(waves_peak[start]))
         delta_len = delta_len[:min_len]
         delta_len = delta_len[~np.isnan(delta_len)]
-        val_dict[f"ECG_{delta_name}_delta_mean"] = delta_len.mean()
-        val_dict[f"ECG_{delta_name}_delta_std"] = delta_len.std()
+        if delta_len.size > 0:
+            val_dict[f"ECG_{delta_name}_delta_mean"] = delta_len.mean()
+            val_dict[f"ECG_{delta_name}_delta_std"] = delta_len.std()
+        else:
+            val_dict[f"ECG_{delta_name}_delta_mean"] = 0.0
+            val_dict[f"ECG_{delta_name}_delta_std"] = 1.0
 
     # Heart rate
     # Should have use the R_peaks, but it is not computed in waves_peak, so use
     # Q_peaks instead.
     dfeet = np.diff(waves_peak["ECG_Q_Peaks"])
     dfeet = dfeet[~np.isnan(dfeet)]
-    # Result in beats per minute
-    dfeet = 60 / dfeet * SAMPLING_RATE
-
-    val_dict["ECG_Heartrate_mean"] = dfeet.mean()
-    val_dict["ECG_Heartrate_std"] = dfeet.std()
+    if dfeet.size > 0:
+        # Result in beats per minute
+        dfeet = 60 / dfeet * SAMPLING_RATE
+        val_dict["ECG_Heartrate_mean"] = dfeet.mean()
+        val_dict["ECG_Heartrate_std"] = dfeet.std()
+    else:
+        val_dict["ECG_Heartrate_mean"] = 0.0
+        val_dict["ECG_Heartrate_std"] = 1.0
 
     return val_dict
 
@@ -197,8 +205,12 @@ def get_peak_stat_values(one_ecg_as_list, waves_peak):
         idx = [x for x in idx if not np.isnan(x)]
         idx = np.array(idx, dtype=int)
         values = one_ecg_as_list[idx]
-        val_dict[f"{peak}_val_mean"] = values.mean()
-        val_dict[f"{peak}_val_std"] = values.std()
+        if values.size > 0:
+            val_dict[f"{peak}_val_mean"] = values.mean()
+            val_dict[f"{peak}_val_std"] = values.std()
+        else:
+            val_dict[f"{peak}_val_mean"] = values.mean()
+            val_dict[f"{peak}_val_std"] = values.std()
         # print(peak, ":", values.mean(), ",", values.std())
     return val_dict
 
@@ -242,18 +254,14 @@ def safe_extract_ppg_features(one_ppg_as_list) -> pd.Series:
 ###############################################################################
 # Estimator
 ###############################################################################
-# CLF with simple Lasso
+# Random Search cross validation CLF with simple Lasso
 # Lasso parameters
 param_lasso = {
     "alpha": stats.loguniform(1e-2, 1e0),
     "tol": stats.loguniform(1e-5, 1e-1),
 }
-
 # run randomized search
 n_iter_search = 15
-# random_search = RandomizedSearchCV(
-#     base_estimator, param_distributions=param_lasso, n_iter=n_iter_search
-# )
 
 
 class MyEstimator:
@@ -267,26 +275,34 @@ class MyEstimator:
                     ),
                     "ecg",
                 ),
-                (
-                    FunctionTransformer(
-                        lambda x: x.apply(safe_extract_ppg_features)
-                    ),
-                    "ppg",
-                ),
+                # (
+                #     FunctionTransformer(
+                #         lambda x: x.apply(safe_extract_ppg_features)
+                #     ),
+                #     "ppg",
+                # ),
                 (SimpleImputer(strategy="median"), ["age"]),
                 (OneHotEncoder(), ["gender", "domain"]),
                 # ("passthrough", ["domain"]),
             ),
-            Lasso(max_iter=1_000, selection="random"),
+            RandomizedSearchCV(
+                Lasso(), param_distributions=param_lasso, n_iter=n_iter_search
+            ),
         )
 
     def fit(self, X, y):
         """Fit the estimator."""
-        print(f"Fit on {X.shape=} {y.shape=}")
+        start = time()
+        print(f"Start fit on {X.shape=} {y.shape=}")
 
         self.clf.fit(
             X,
             y,
+        )
+        elapsed_time = time() - start
+        minutes, seconds = divmod(elapsed_time, 60)
+        print(
+            f"End fit for {int(minutes)}min {seconds:.2f}s for {self.clf[-1]}"
         )
         return self
 
