@@ -1,11 +1,12 @@
 # Use of neurokit feature extraction
+import warnings
+from time import time
+
 import neurokit2 as nk
 import numpy as np
 import pandas as pd
-from time import time
 import scipy.stats as stats
 from sklearn.compose import make_column_transformer
-
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Lasso
@@ -13,7 +14,6 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
-
 
 ###############################################################################
 # Constants
@@ -158,8 +158,8 @@ def get_waves_len(waves_peak) -> dict[str : np.float64]:
         )
         waves_len = waves_len[~np.isnan(waves_len)]
         if waves_len.size > 0:
-            val_dict[f"ECG_{wave_n}_Duration_mean"] = waves_len.mean()
-            val_dict[f"ECG_{wave_n}_Duration_std"] = waves_len.std()
+            val_dict[f"ECG_{wave_n}_Duration_mean"] = np.nanmean(waves_len)
+            val_dict[f"ECG_{wave_n}_Duration_std"] = np.nanstd(waves_len)
         else:
             val_dict[f"ECG_{wave_n}_Duration_mean"] = 0.0
             val_dict[f"ECG_{wave_n}_Duration_std"] = 1.0
@@ -167,17 +167,14 @@ def get_waves_len(waves_peak) -> dict[str : np.float64]:
     # Delta between phases PR, peak QS, RT, TP
 
     for delta_name, [end, start] in ECG_DELTAS.items():
-        delta_len = np.subtract(
-            *np.broadcast_arrays(
-                np.array(waves_peak[end]), np.array(waves_peak[start])
-            )
-        )
-        min_len = min(len(waves_peak[end]), len(waves_peak[start]))
-        delta_len = delta_len[:min_len]
+        end_array = np.array(waves_peak[end])
+        start_array = np.array(waves_peak[start])
+        min_len = min(len(end_array), len(start_array))
+        delta_len = end_array[:min_len] - start_array[:min_len]
         delta_len = delta_len[~np.isnan(delta_len)]
         if delta_len.size > 0:
-            val_dict[f"ECG_{delta_name}_delta_mean"] = delta_len.mean()
-            val_dict[f"ECG_{delta_name}_delta_std"] = delta_len.std()
+            val_dict[f"ECG_{delta_name}_delta_mean"] = np.nanmean(delta_len)
+            val_dict[f"ECG_{delta_name}_delta_std"] = np.nanstd(delta_len)
         else:
             val_dict[f"ECG_{delta_name}_delta_mean"] = 0.0
             val_dict[f"ECG_{delta_name}_delta_std"] = 1.0
@@ -186,15 +183,20 @@ def get_waves_len(waves_peak) -> dict[str : np.float64]:
     # Should have use the R_peaks, but it is not computed in waves_peak, so use
     # Q_peaks instead.
     dfeet = np.diff(waves_peak["ECG_Q_Peaks"])
-    dfeet = dfeet[~np.isnan(dfeet)]
-    if dfeet.size > 0:
-        # Result in beats per minute
+    with np.errstate(divide="ignore", invalid="ignore"):
         dfeet = 60 / dfeet * SAMPLING_RATE
-        val_dict["ECG_Heartrate_mean"] = dfeet.mean()
-        val_dict["ECG_Heartrate_std"] = dfeet.std()
-    else:
-        val_dict["ECG_Heartrate_mean"] = 0.0
-        val_dict["ECG_Heartrate_std"] = 1.0
+        dfeet = np.where(
+            np.isfinite(dfeet), dfeet, 0
+        )  # Replace inf and NaN with 0
+        # dfeet = dfeet[~np.isnan(dfeet)]
+        if dfeet.size > 0:
+            # Result in beats per minute
+            dfeet = 60 / dfeet * SAMPLING_RATE
+            val_dict["ECG_Heartrate_mean"] = np.nanmean(dfeet)
+            val_dict["ECG_Heartrate_std"] = np.nanstd(dfeet)
+        else:
+            val_dict["ECG_Heartrate_mean"] = 0.0
+            val_dict["ECG_Heartrate_std"] = 1.0
 
     return val_dict
 
@@ -206,12 +208,13 @@ def get_peak_stat_values(one_ecg_as_list, waves_peak):
         idx = np.array(idx, dtype=int)
         values = one_ecg_as_list[idx]
         if values.size > 0:
-            val_dict[f"{peak}_val_mean"] = values.mean()
-            val_dict[f"{peak}_val_std"] = values.std()
+            val_dict[f"{peak}_val_mean"] = np.nanmean(values)
+            val_dict[f"{peak}_val_std"] = np.nanstd(values)
         else:
-            val_dict[f"{peak}_val_mean"] = values.mean()
-            val_dict[f"{peak}_val_std"] = values.std()
-        # print(peak, ":", values.mean(), ",", values.std())
+            val_dict[f"{peak}_val_mean"] = 0.0
+            val_dict[f"{peak}_val_std"] = 1.0
+        # # print(peak, ":", values.mean(), ",", values.std())
+
     return val_dict
 
 
@@ -229,9 +232,16 @@ def extract_ecg_features(one_ecg_as_list) -> pd.Series:
     return pd.Series(features)
 
 
+def v_ecg_features(X):
+    return X.apply(extract_ecg_features)
+
+
 ###############################################################################
 # PPG Preprocessing
 ###############################################################################
+# TODO: too many runtime errors during the nk calculations.
+
+
 def extract_ppg_features(one_ppg_as_list) -> pd.Series:
     """Extract relevant features from the ppg"""
     signal, info = nk.ppg_process(one_ppg_as_list, sampling_rate=SAMPLING_RATE)
@@ -242,13 +252,21 @@ def extract_ppg_features(one_ppg_as_list) -> pd.Series:
 
 def safe_extract_ppg_features(one_ppg_as_list) -> pd.Series:
     """Extract relevant features from the ppg, return Series full of 0.0 if specific ValueError occurs."""
-    try:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        warnings.simplefilter("ignore", category=nk.NeuroKitWarning)
         return extract_ppg_features(one_ppg_as_list)
-    except ValueError as e:
-        if "NeuroKit error: the window" in str(e):
-            return pd.Series(0.0, index=ppg_keep_cols)
-        else:
-            raise e
+    # try:
+    #     return extract_ppg_features(one_ppg_as_list)
+    # except ValueError as e:
+    #     if "NeuroKit error: the window" in str(e):
+    #         return pd.Series(0.0, index=ppg_keep_cols)
+    #     else:
+    #         raise e
+
+
+def v_ppg_features(X):
+    return X.apply(safe_extract_ppg_features)
 
 
 ###############################################################################
@@ -264,7 +282,7 @@ param_lasso = {
 n_iter_search = 15
 
 
-class MyEstimator:
+class MyLasso:
     def __init__(self):
         # pipeline creation
         self.clf = make_pipeline(
@@ -312,6 +330,66 @@ class MyEstimator:
         return self.clf.predict(X)
 
 
+class MyHGB:
+    # Parameters for the RandomizedSearch
+    param_HGB = {
+        "learning_rate": stats.loguniform(1e-3, 1e-1),
+        "max_features": stats.uniform(),
+        "max_depth": stats.randint(3, 21),
+    }
+    n_iter_search = 15
+
+    def __init__(self):
+        # pipeline creation
+
+        self.clf = make_pipeline(
+            make_column_transformer(
+                (
+                    FunctionTransformer(v_ecg_features),
+                    "ecg",
+                ),
+                # (
+                #     FunctionTransformer(v_ppg_features),
+                #     "ppg",
+                # ),
+                ("passthrough", ["age", "gender", "domain"]),
+            ),
+            RandomizedSearchCV(
+                HistGradientBoostingRegressor(
+                    loss="absolute_error",
+                    categorical_features=[
+                        41,
+                        42,
+                    ],  # indices of gender and domain
+                    random_state=1,
+                ),
+                param_distributions=self.param_HGB,
+                n_iter=n_iter_search,
+            ),
+        )
+
+    def fit(self, X, y):
+        """Fit the estimator."""
+        start = time()
+        print(f"Start fit on {X.shape=} {y.shape=}")
+        self.clf.fit(
+            X,
+            y,
+        )
+        elapsed_time = time() - start
+        minutes, seconds = divmod(elapsed_time, 60)
+        print(
+            f"End fit for {int(minutes)}min {seconds:.2f}s for {self.clf[-1]}"
+        )
+        return self
+
+    def predict(self, X):
+        print(f"predict on {X.shape=}")
+
+        return self.clf.predict(X)
+
+
 def get_estimator():
-    model = MyEstimator()
+    # model = MyLasso()
+    model = MyHGB()
     return model
