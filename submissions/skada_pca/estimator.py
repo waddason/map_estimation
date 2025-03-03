@@ -62,7 +62,7 @@ class MyEstimator:
                 ),
                 # ("passthrough", ["domain"]),
             ),
-            IncrementalPCA(n_components=10),
+            IncrementalPCA(n_components=50),
             CORALAdapter(),
             LassoCV(),
         )
